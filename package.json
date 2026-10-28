@@ -9,12 +9,14 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "contracts:check": "node scripts/check-contracts.mjs"
   },
   "dependencies": {
     "next": "^15.5.0",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "zod": "3.25.76"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
