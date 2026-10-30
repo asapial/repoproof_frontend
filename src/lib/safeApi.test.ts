@@ -41,4 +41,24 @@ describe("safe MVP API client", () => {
     await expect(api.session()).rejects.toMatchObject({ code: "INVALID_RESPONSE" });
     await expect(api.signIn("user@example.test", "test-only")).rejects.toMatchObject({ code: "AUTH_FAILED" });
   });
+  it("saves, loads and deletes a validated user draft", async () => {
+    const draft = { repositoryId: fixture.repositoryId, fixtureKey: fixture.fixtureKey, issueNumber: fixture.issueNumber };
+    const mock = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({ draft }), { status: 200 })).mockResolvedValueOnce(new Response(JSON.stringify({ draft }), { status: 200 })).mockResolvedValueOnce(new Response(JSON.stringify({ draft: null }), { status: 200 }));
+    vi.stubGlobal("fetch", mock);
+    const api = createSafeApi("http://127.0.0.1:5000");
+    expect(await api.saveDraft(fixture)).toEqual(draft);
+    expect(await api.draft()).toEqual(draft);
+    await expect(api.deleteDraft()).resolves.toBeUndefined();
+    expect(mock).toHaveBeenNthCalledWith(1, "http://127.0.0.1:5000/api/v1/request-draft", expect.objectContaining({ method: "PUT", credentials: "include" }));
+    expect(mock).toHaveBeenNthCalledWith(3, "http://127.0.0.1:5000/api/v1/request-draft", expect.objectContaining({ method: "DELETE", credentials: "include" }));
+  });
+  it("rejects malformed, mismatched and unauthorized draft responses", async () => {
+    const mock = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({ draft: { ...fixture, secret: "do-not-show" } }), { status: 200 })).mockResolvedValueOnce(new Response(JSON.stringify({ draft: { repositoryId: "other", fixtureKey: "other", issueNumber: 1 } }), { status: 200 })).mockResolvedValueOnce(new Response(JSON.stringify({ error: { code: "UNAUTHENTICATED", message: "Authentication required", requestId: "req_1" } }), { status: 401 })).mockRejectedValueOnce(new Error("offline"));
+    vi.stubGlobal("fetch", mock);
+    const api = createSafeApi("http://127.0.0.1:5000");
+    await expect(api.draft()).rejects.toMatchObject({ code: "INVALID_RESPONSE" });
+    await expect(api.saveDraft(fixture)).rejects.toMatchObject({ code: "INVALID_RESPONSE" });
+    await expect(api.deleteDraft()).rejects.toMatchObject({ code: "UNAUTHENTICATED" });
+    await expect(api.draft()).rejects.toMatchObject({ code: "NETWORK_ERROR" });
+  });
 });

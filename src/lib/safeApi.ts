@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { safeFixtureCatalogSchema, type SafeFixture } from "../contracts/vendor/v1/safeMvp";
 import { createRunRequestSchema } from "../contracts/v1";
+import { requestDraftSchema, requestDraftResponseSchema, type RequestDraftInput } from "../contracts/vendor/v1/requestDraft";
 import { parseV1Error } from "../contracts/v1Error";
 
 const MAX_RESPONSE_BYTES = 64 * 1024;
@@ -46,7 +47,7 @@ async function readJson(response: Response): Promise<unknown> {
 
 export function createSafeApi(baseUrl: string) {
   const origin = resolveApiOrigin(baseUrl);
-  async function request(path: string, options: { method?: "GET" | "POST"; body?: unknown; auth?: boolean } = {}): Promise<unknown> {
+  async function request(path: string, options: { method?: "GET" | "POST" | "PUT" | "DELETE"; body?: unknown; auth?: boolean } = {}): Promise<unknown> {
     let response: Response;
     try {
       response = await fetch(`${origin}${path}`, { method: options.method ?? "GET", credentials: "include", cache: "no-store", ...(options.body === undefined ? {} : { headers: { "content-type": "application/json" }, body: JSON.stringify(options.body) }) });
@@ -74,6 +75,21 @@ export function createSafeApi(baseUrl: string) {
       const result = safeFixtureCatalogSchema.safeParse(await request("/api/v1/repositories"));
       if (!result.success) throw invalidResponse();
       return result.data.repositories;
+    },
+    async draft(): Promise<RequestDraftInput | null> {
+      const result = requestDraftResponseSchema.safeParse(await request("/api/v1/request-draft"));
+      if (!result.success) throw invalidResponse();
+      return result.data.draft;
+    },
+    async saveDraft(fixture: SafeFixture): Promise<RequestDraftInput> {
+      const body = requestDraftSchema.parse({ repositoryId: fixture.repositoryId, fixtureKey: fixture.fixtureKey, issueNumber: fixture.issueNumber });
+      const result = requestDraftResponseSchema.safeParse(await request("/api/v1/request-draft", { method: "PUT", body }));
+      if (!result.success || !result.data.draft || result.data.draft.repositoryId !== body.repositoryId || result.data.draft.fixtureKey !== body.fixtureKey || result.data.draft.issueNumber !== body.issueNumber) throw invalidResponse();
+      return result.data.draft;
+    },
+    async deleteDraft(): Promise<void> {
+      const result = requestDraftResponseSchema.safeParse(await request("/api/v1/request-draft", { method: "DELETE" }));
+      if (!result.success || result.data.draft !== null) throw invalidResponse();
     },
     async requestRun(fixture: SafeFixture): Promise<never> {
       const body = createRunRequestSchema.parse({ repositoryId: fixture.repositoryId, fixtureKey: fixture.fixtureKey, issueNumber: fixture.issueNumber });

@@ -22,6 +22,9 @@ try {
   await page.getByRole("button", { name: "Create account", exact: true }).click();
   await page.getByRole("heading", { name: "Choose a fixture" }).waitFor({ timeout: 15000 });
   assert.match(await page.getByLabel("Approved repository").innerText(), /asapial\/repoproof_backend.*issue #1/);
+  await page.getByRole("button", { name: "Save draft" }).click();
+  await page.getByRole("status").filter({ hasText: "Draft saved. No run was created." }).waitFor();
+  await page.getByText(/Saved draft:.*This is not a run/).waitFor();
   const unavailable = page.waitForResponse(r => r.url() === `${backend}/api/v1/runs` && r.request().method() === "POST");
   await page.getByRole("button", { name: "Request verification" }).click();
   assert.equal((await unavailable).status(), 503);
@@ -32,9 +35,10 @@ try {
   assert.doesNotMatch(storage.cookie, /session_token/);
   await page.reload({ waitUntil: "networkidle" });
   await page.getByRole("heading", { name: "Choose a fixture" }).waitFor();
+  await page.getByText(/Saved draft:.*This is not a run/).waitFor();
   await page.setViewportSize({ width: 390, height: 844 });
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1));
-  await page.screenshot({ path: process.env.RPF_E2E_SCREENSHOT ?? join(tmpdir(), "rpf013s-mobile-review.png"), fullPage: true });
+  await page.screenshot({ path: process.env.RPF_E2E_SCREENSHOT ?? join(tmpdir(), `rpf013d-mobile-${randomUUID()}.png`), fullPage: true });
   await page.getByRole("button", { name: "Sign out" }).click();
   await page.getByRole("button", { name: "Sign in", exact: true }).waitFor();
   await page.getByLabel("Email").fill(email);
@@ -45,5 +49,12 @@ try {
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await page.getByRole("heading", { name: "Choose a fixture" }).waitFor();
-  console.log("PASS: production frontend; real HTTP signup, session, catalog, unavailable 503, reload, signout, rejected and successful login; mobile layout");
+  await page.getByText(/Saved draft:.*This is not a run/).waitFor();
+  await page.getByRole("button", { name: "Delete draft" }).click();
+  await page.getByRole("status").filter({ hasText: "Draft deleted." }).waitFor();
+  assert.equal(await page.getByText(/Saved draft:/).count(), 0);
+  await page.reload({ waitUntil: "networkidle" });
+  await page.getByRole("heading", { name: "Choose a fixture" }).waitFor();
+  assert.equal(await page.getByText(/Saved draft:/).count(), 0);
+  console.log("PASS: production frontend; draft save/reload/sign-in/delete; real HTTP signup, session, catalog, unavailable 503, reload, signout, rejected and successful login; mobile layout");
 } finally { await context.close(); await browser.close(); }

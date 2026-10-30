@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import type { SafeFixture } from "../contracts/vendor/v1/safeMvp";
+import type { RequestDraftInput } from "../contracts/vendor/v1/requestDraft";
 import { ApiFailure, createSafeApi } from "../lib/safeApi";
 
 const configuredOrigin = process.env.NEXT_PUBLIC_API_BASE_URL ?? (process.env.NODE_ENV === "development" ? "http://localhost:5000" : "");
@@ -18,6 +19,7 @@ export function SafeMvp() {
   const [user, setUser] = useState<User | null>(null);
   const [fixtures, setFixtures] = useState<SafeFixture[]>([]);
   const [selected, setSelected] = useState("");
+  const [draft, setDraft] = useState<RequestDraftInput | null>(null);
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -33,9 +35,10 @@ export function SafeMvp() {
         const session = await api.session();
         if (!active) return;
         if (!session) { setPhase("signed-out"); return; }
-        const catalog = await api.catalog();
+        const [catalog, saved] = await Promise.all([api.catalog(), api.draft()]);
         if (!active) return;
-        setUser(session); setFixtures(catalog); setSelected(catalog[0]?.repositoryId ?? ""); setPhase("ready");
+        if (saved && !catalog.some(item => item.repositoryId === saved.repositoryId && item.fixtureKey === saved.fixtureKey && item.issueNumber === saved.issueNumber)) throw new ApiFailure("INVALID_RESPONSE", "The saved draft is unavailable. Try again.");
+        setUser(session); setFixtures(catalog); setDraft(saved); setSelected(saved?.repositoryId ?? catalog[0]?.repositoryId ?? ""); setPhase("ready");
       } catch (error) { if (active) { setMessage(publicMessage(error)); setPhase("error"); } }
     }
     void load();
@@ -51,8 +54,9 @@ export function SafeMvp() {
       else await api.signUp(name, email, password);
       const session = await api.session();
       if (!session) throw new ApiFailure("AUTH_FAILED", "Sign-in did not create a session.");
-      const catalog = await api.catalog();
-      setUser(session); setFixtures(catalog); setSelected(catalog[0]?.repositoryId ?? ""); setPhase("ready");
+      const [catalog, saved] = await Promise.all([api.catalog(), api.draft()]);
+      if (saved && !catalog.some(item => item.repositoryId === saved.repositoryId && item.fixtureKey === saved.fixtureKey && item.issueNumber === saved.issueNumber)) throw new ApiFailure("INVALID_RESPONSE", "The saved draft is unavailable. Try again.");
+      setUser(session); setFixtures(catalog); setDraft(saved); setSelected(saved?.repositoryId ?? catalog[0]?.repositoryId ?? ""); setPhase("ready");
     } catch (error) { setMessage(publicMessage(error)); }
     finally { setPassword(""); setBusy(false); }
   }
@@ -60,7 +64,24 @@ export function SafeMvp() {
   async function signOut() {
     if (!api || busy) return;
     setBusy(true); setMessage("");
-    try { await api.signOut(); setUser(null); setFixtures([]); setSelected(""); setPhase("signed-out"); }
+    try { await api.signOut(); setUser(null); setFixtures([]); setSelected(""); setDraft(null); setPhase("signed-out"); }
+    catch (error) { setMessage(publicMessage(error)); }
+    finally { setBusy(false); }
+  }
+
+  async function saveDraft() {
+    const fixture = fixtures.find(item => item.repositoryId === selected);
+    if (!api || !fixture || busy) return;
+    setBusy(true); setMessage("");
+    try { setDraft(await api.saveDraft(fixture)); setMessage("Draft saved. No run was created."); }
+    catch (error) { setMessage(publicMessage(error)); }
+    finally { setBusy(false); }
+  }
+
+  async function deleteDraft() {
+    if (!api || busy) return;
+    setBusy(true); setMessage("");
+    try { await api.deleteDraft(); setDraft(null); setMessage("Draft deleted."); }
     catch (error) { setMessage(publicMessage(error)); }
     finally { setBusy(false); }
   }
@@ -95,7 +116,7 @@ export function SafeMvp() {
           </form>}
           {phase === "ready" && <div>
             <div className="identity"><span>Signed in as <strong>{user?.email}</strong></span><button className="text-button" type="button" disabled={busy} onClick={signOut}>Sign out</button></div>
-            {fixtures.length > 0 ? <><label>Approved repository<select value={selected} onChange={event => { setSelected(event.target.value); setMessage(""); }}>{fixtures.map(item => <option key={item.repositoryId} value={item.repositoryId}>{item.repository} · issue #{item.issueNumber}</option>)}</select></label><p className="muted">Curated snapshot. No live GitHub data or code execution.</p><button className="primary" type="button" disabled={busy || !selected} onClick={requestRun}>{busy ? "Checking…" : "Request verification"}</button></> : <p className="muted">No approved fixtures are available.</p>}
+            {fixtures.length > 0 ? <><label>Approved repository<select value={selected} onChange={event => { setSelected(event.target.value); setMessage(""); }}>{fixtures.map(item => <option key={item.repositoryId} value={item.repositoryId}>{item.repository} · issue #{item.issueNumber}</option>)}</select></label><p className="muted">Curated snapshot. No live GitHub data or code execution.</p>{draft && <p className="muted">Saved draft: {fixtures.find(item => item.repositoryId === draft.repositoryId)?.repository} · issue #{draft.issueNumber}. This is not a run.</p>}<div className="actions"><button type="button" disabled={busy || !selected} onClick={saveDraft}>Save draft</button>{draft && <button type="button" disabled={busy} onClick={deleteDraft}>Delete draft</button>}<button className="primary" type="button" disabled={busy || !selected} onClick={requestRun}>{busy ? "Working…" : "Request verification"}</button></div></> : <p className="muted">No approved fixtures are available.</p>}
             {message && <p className="notice" role="status" aria-live="polite">{message}</p>}
           </div>}
         </section>
