@@ -1,0 +1,44 @@
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { createSafeApi, resolveApiOrigin } from "./safeApi";
+
+const fixture = { repositoryId: "repoproof-backend", repository: "asapial/repoproof_backend", fixtureKey: "discount-bug", issueNumber: 1, source: "CURATED" } as const;
+afterEach(() => vi.unstubAllGlobals());
+describe("safe MVP API client", () => {
+  it("validates the API origin without accepting credentials, paths or insecure remote hosts", () => {
+    expect(resolveApiOrigin("http://127.0.0.1:5000")).toBe("http://127.0.0.1:5000");
+    expect(resolveApiOrigin("https://api.example.test")).toBe("https://api.example.test");
+    for (const origin of ["", "http://example.test", "https://user:pass@example.test", "https://api.example.test/path", "javascript:alert(1)"]) expect(() => resolveApiOrigin(origin)).toThrow();
+  });
+  it("uses credentialed requests and validates public catalog metadata", async () => {
+    const mock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ repositories: [fixture] }), { status: 200 }));
+    vi.stubGlobal("fetch", mock);
+    const api = createSafeApi("http://127.0.0.1:5000");
+    expect(await api.catalog()).toEqual([fixture]);
+    expect(mock).toHaveBeenCalledWith("http://127.0.0.1:5000/api/v1/repositories", expect.objectContaining({ credentials: "include", cache: "no-store" }));
+  });
+  it("rejects malformed and oversized server responses without reflecting them", async () => {
+    const mock = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({ repositories: [{ ...fixture, secret: "private-token" }] }), { status: 200 })).mockResolvedValueOnce(new Response("x".repeat(70000), { status: 200 }));
+    vi.stubGlobal("fetch", mock);
+    const api = createSafeApi("http://127.0.0.1:5000");
+    await expect(api.catalog()).rejects.toMatchObject({ code: "INVALID_RESPONSE" });
+    await expect(api.catalog()).rejects.toMatchObject({ code: "INVALID_RESPONSE" });
+  });
+  it("reports unavailable honestly and does not accept a synthetic success as a run", async () => {
+    const mock = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({ error: { code: "RUNNER_UNAVAILABLE", message: "The isolated runner is unavailable", requestId: "req_1" } }), { status: 503 })).mockResolvedValueOnce(new Response(JSON.stringify({ id: "run_fake" }), { status: 200 }));
+    vi.stubGlobal("fetch", mock);
+    const api = createSafeApi("http://127.0.0.1:5000");
+    await expect(api.requestRun(fixture)).rejects.toMatchObject({ code: "RUNNER_UNAVAILABLE" });
+    await expect(api.requestRun(fixture)).rejects.toMatchObject({ code: "INVALID_RESPONSE" });
+  });
+  it("keeps only public user fields from a valid session", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ user: { name: "Test", email: "test@example.test", token: "not-for-ui" }, session: { token: "not-for-ui" } }), { status: 200 })));
+    expect(await createSafeApi("http://127.0.0.1:5000").session()).toEqual({ name: "Test", email: "test@example.test" });
+  });
+  it("does not trust malformed session or legacy auth error bodies", async () => {
+    const mock = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({ user: { email: "bad" } }), { status: 200 })).mockResolvedValueOnce(new Response(JSON.stringify({ message: "private diagnostic" }), { status: 401 }));
+    vi.stubGlobal("fetch", mock);
+    const api = createSafeApi("http://127.0.0.1:5000");
+    await expect(api.session()).rejects.toMatchObject({ code: "INVALID_RESPONSE" });
+    await expect(api.signIn("user@example.test", "test-only")).rejects.toMatchObject({ code: "AUTH_FAILED" });
+  });
+});
