@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createRunRequestSchema, createRunResponseSchema, errorResponseSchema, eventsQuerySchema, eventsResponseSchema, reportResponseSchema } from "./v1";
+import { approvalHeadersSchema, createRunRequestSchema, createRunResponseSchema, errorResponseSchema, eventsQuerySchema, eventsResponseSchema, reportResponseSchema } from "./v1";
 import type { CreateRunRequest, CreateRunResponse } from "./v1";
 
 describe("v1 contract snapshot", () => {
@@ -19,6 +19,9 @@ describe("v1 contract snapshot", () => {
     expect(eventsQuerySchema.safeParse({ afterSeq: "-1" }).success).toBe(false);
     const event = { seq: 6, stage: "BASELINING", type: "TEST", title: "Test", detail: {}, at: "2026-10-31T08:10:00Z" };
     expect(eventsResponseSchema.safeParse({ runId: "run_1", events: [event], nextCursor: 6, terminal: false }).success).toBe(true);
+    expect(eventsResponseSchema.safeParse({ runId: "run_1", events: [{ ...event, detail: { nested: [{ valid: true }] } }], nextCursor: 6, terminal: false }).success).toBe(true);
+    expect(eventsResponseSchema.safeParse({ runId: "run_1", events: [{ ...event, detail: { invalid: Infinity } }], nextCursor: 6, terminal: false }).success).toBe(false);
+    expect(approvalHeadersSchema.safeParse({ "idempotency-key": "11111111-1111-1111-1111-111111111111" }).success).toBe(true);
     expect(eventsResponseSchema.safeParse({ runId: "run_1", events: [event], nextCursor: 5, terminal: false }).success).toBe(false);
   });
   it("rejects incomplete reports rather than inventing evidence", () => {
