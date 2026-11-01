@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import type { SafeFixture } from "../contracts/vendor/v1/safeMvp";
 import type { RequestDraftInput } from "../contracts/vendor/v1/requestDraft";
 import { ApiFailure, createSafeApi } from "../lib/safeApi";
@@ -27,6 +27,17 @@ export function SafeMvp() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
 
+  const clearPrivateState = useCallback(() => {
+    setUser(null); setFixtures([]); setSelected(""); setDraft(null);
+    setName(""); setEmail(""); setPassword(""); setMode("signin");
+  }, []);
+  const handleFailure = useCallback((error: unknown) => {
+    if (error instanceof ApiFailure && error.code === "UNAUTHENTICATED") {
+      clearPrivateState(); setPhase("signed-out");
+    }
+    setMessage(publicMessage(error));
+  }, [clearPrivateState]);
+
   useEffect(() => {
     let active = true;
     async function load() {
@@ -34,16 +45,21 @@ export function SafeMvp() {
       try {
         const session = await api.session();
         if (!active) return;
-        if (!session) { setPhase("signed-out"); return; }
+        if (!session) { clearPrivateState(); setPhase("signed-out"); return; }
         const [catalog, saved] = await Promise.all([api.catalog(), api.draft()]);
         if (!active) return;
         if (saved && !catalog.some(item => item.repositoryId === saved.repositoryId && item.fixtureKey === saved.fixtureKey && item.issueNumber === saved.issueNumber)) throw new ApiFailure("INVALID_RESPONSE", "The saved draft is unavailable. Try again.");
         setUser(session); setFixtures(catalog); setDraft(saved); setSelected(saved?.repositoryId ?? catalog[0]?.repositoryId ?? ""); setPhase("ready");
-      } catch (error) { if (active) { setMessage(publicMessage(error)); setPhase("error"); } }
+      } catch (error) {
+        if (active) {
+          handleFailure(error);
+          if (!(error instanceof ApiFailure && error.code === "UNAUTHENTICATED")) setPhase("error");
+        }
+      }
     }
     void load();
     return () => { active = false; };
-  }, [api]);
+  }, [api, clearPrivateState, handleFailure]);
 
   async function authenticate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -57,15 +73,15 @@ export function SafeMvp() {
       const [catalog, saved] = await Promise.all([api.catalog(), api.draft()]);
       if (saved && !catalog.some(item => item.repositoryId === saved.repositoryId && item.fixtureKey === saved.fixtureKey && item.issueNumber === saved.issueNumber)) throw new ApiFailure("INVALID_RESPONSE", "The saved draft is unavailable. Try again.");
       setUser(session); setFixtures(catalog); setDraft(saved); setSelected(saved?.repositoryId ?? catalog[0]?.repositoryId ?? ""); setPhase("ready");
-    } catch (error) { setMessage(publicMessage(error)); }
+    } catch (error) { handleFailure(error); }
     finally { setPassword(""); setBusy(false); }
   }
 
   async function signOut() {
     if (!api || busy) return;
     setBusy(true); setMessage("");
-    try { await api.signOut(); setUser(null); setFixtures([]); setSelected(""); setDraft(null); setPhase("signed-out"); }
-    catch (error) { setMessage(publicMessage(error)); }
+    try { await api.signOut(); clearPrivateState(); setPhase("signed-out"); }
+    catch (error) { handleFailure(error); }
     finally { setBusy(false); }
   }
 
@@ -74,7 +90,7 @@ export function SafeMvp() {
     if (!api || !fixture || busy) return;
     setBusy(true); setMessage("");
     try { setDraft(await api.saveDraft(fixture)); setMessage("Draft saved. No run was created."); }
-    catch (error) { setMessage(publicMessage(error)); }
+    catch (error) { handleFailure(error); }
     finally { setBusy(false); }
   }
 
@@ -82,7 +98,7 @@ export function SafeMvp() {
     if (!api || busy) return;
     setBusy(true); setMessage("");
     try { await api.deleteDraft(); setDraft(null); setMessage("Draft deleted."); }
-    catch (error) { setMessage(publicMessage(error)); }
+    catch (error) { handleFailure(error); }
     finally { setBusy(false); }
   }
 
@@ -91,7 +107,7 @@ export function SafeMvp() {
     if (!api || !fixture || busy) return;
     setBusy(true); setMessage("");
     try { await api.requestRun(fixture); }
-    catch (error) { setMessage(publicMessage(error)); }
+    catch (error) { handleFailure(error); }
     finally { setBusy(false); }
   }
 

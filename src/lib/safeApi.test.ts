@@ -61,4 +61,20 @@ describe("safe MVP API client", () => {
     await expect(api.deleteDraft()).rejects.toMatchObject({ code: "UNAUTHENTICATED" });
     await expect(api.draft()).rejects.toMatchObject({ code: "NETWORK_ERROR" });
   });
+  it.each(["saveDraft", "deleteDraft", "requestRun"] as const)("recognizes genuine session expiry during %s", async action => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: { code: "UNAUTHENTICATED", message: "private diagnostic", requestId: "req_1" } }), { status: 401 })));
+    const api = createSafeApi("http://127.0.0.1:5000");
+    const operation = action === "deleteDraft" ? api.deleteDraft() : api[action](fixture);
+    await expect(operation).rejects.toMatchObject({ code: "UNAUTHENTICATED", message: "Please sign in again." });
+  });
+  it("does not classify malformed 401, forbidden or authentication failures as session expiry", async () => {
+    vi.stubGlobal("fetch", vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ message: "private" }), { status: 401 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ error: { code: "UNAUTHENTICATED", message: "private", requestId: "req_1" } }), { status: 403 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ error: { code: "UNAUTHENTICATED", message: "private", requestId: "req_1" } }), { status: 401 })));
+    const api = createSafeApi("http://127.0.0.1:5000");
+    await expect(api.deleteDraft()).rejects.toMatchObject({ code: "REQUEST_FAILED" });
+    await expect(api.deleteDraft()).rejects.toMatchObject({ code: "REQUEST_FAILED" });
+    await expect(api.signIn("b@example.test", "synthetic")).rejects.toMatchObject({ code: "AUTH_FAILED" });
+  });
 });

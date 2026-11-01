@@ -46,6 +46,7 @@ try {
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await page.getByRole("alert").filter({ hasText: "Authentication failed" }).waitFor();
   assert.equal(await page.getByLabel("Password").inputValue(), "");
+  assert.equal(await page.getByLabel("Email").inputValue(), email);
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await page.getByRole("heading", { name: "Choose a fixture" }).waitFor();
