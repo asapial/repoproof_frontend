@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import type { SafeFixture } from "../contracts/vendor/v1/safeMvp";
 import type { RequestDraftInput } from "../contracts/vendor/v1/requestDraft";
 import { ApiFailure, createSafeApi } from "../lib/safeApi";
@@ -26,12 +26,14 @@ export function SafeMvp() {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const mounted = useRef(false);
 
   const clearPrivateState = useCallback(() => {
     setUser(null); setFixtures([]); setSelected(""); setDraft(null);
     setName(""); setEmail(""); setPassword(""); setMode("signin");
   }, []);
   const handleFailure = useCallback((error: unknown) => {
+    if (!mounted.current) return;
     if (error instanceof ApiFailure && error.code === "UNAUTHENTICATED") {
       clearPrivateState(); setPhase("signed-out");
     }
@@ -40,6 +42,7 @@ export function SafeMvp() {
 
   useEffect(() => {
     let active = true;
+    mounted.current = true;
     async function load() {
       if (!api) { if (active) { setMessage("Configure NEXT_PUBLIC_API_BASE_URL with a secure backend origin."); setPhase("error"); } return; }
       try {
@@ -58,7 +61,7 @@ export function SafeMvp() {
       }
     }
     void load();
-    return () => { active = false; };
+    return () => { active = false; mounted.current = false; api?.cancelPending(); };
   }, [api, clearPrivateState, handleFailure]);
 
   async function authenticate(event: FormEvent<HTMLFormElement>) {
@@ -68,38 +71,41 @@ export function SafeMvp() {
     try {
       if (mode === "signin") await api.signIn(email, password);
       else await api.signUp(name, email, password);
+      if (!mounted.current) return;
       const session = await api.session();
+      if (!mounted.current) return;
       if (!session) throw new ApiFailure("AUTH_FAILED", "Sign-in did not create a session.");
       const [catalog, saved] = await Promise.all([api.catalog(), api.draft()]);
+      if (!mounted.current) return;
       if (saved && !catalog.some(item => item.repositoryId === saved.repositoryId && item.fixtureKey === saved.fixtureKey && item.issueNumber === saved.issueNumber)) throw new ApiFailure("INVALID_RESPONSE", "The saved draft is unavailable. Try again.");
       setUser(session); setFixtures(catalog); setDraft(saved); setSelected(saved?.repositoryId ?? catalog[0]?.repositoryId ?? ""); setPhase("ready");
     } catch (error) { handleFailure(error); }
-    finally { setPassword(""); setBusy(false); }
+    finally { if (mounted.current) { setPassword(""); setBusy(false); } }
   }
 
   async function signOut() {
     if (!api || busy) return;
     setBusy(true); setMessage("");
-    try { await api.signOut(); clearPrivateState(); setPhase("signed-out"); }
+    try { await api.signOut(); if (mounted.current) { clearPrivateState(); setPhase("signed-out"); } }
     catch (error) { handleFailure(error); }
-    finally { setBusy(false); }
+    finally { if (mounted.current) setBusy(false); }
   }
 
   async function saveDraft() {
     const fixture = fixtures.find(item => item.repositoryId === selected);
     if (!api || !fixture || busy) return;
     setBusy(true); setMessage("");
-    try { setDraft(await api.saveDraft(fixture)); setMessage("Draft saved. No run was created."); }
+    try { const saved = await api.saveDraft(fixture); if (mounted.current) { setDraft(saved); setMessage("Draft saved. No run was created."); } }
     catch (error) { handleFailure(error); }
-    finally { setBusy(false); }
+    finally { if (mounted.current) setBusy(false); }
   }
 
   async function deleteDraft() {
     if (!api || busy) return;
     setBusy(true); setMessage("");
-    try { await api.deleteDraft(); setDraft(null); setMessage("Draft deleted."); }
+    try { await api.deleteDraft(); if (mounted.current) { setDraft(null); setMessage("Draft deleted."); } }
     catch (error) { handleFailure(error); }
-    finally { setBusy(false); }
+    finally { if (mounted.current) setBusy(false); }
   }
 
   async function requestRun() {
@@ -108,7 +114,7 @@ export function SafeMvp() {
     setBusy(true); setMessage("");
     try { await api.requestRun(fixture); }
     catch (error) { handleFailure(error); }
-    finally { setBusy(false); }
+    finally { if (mounted.current) setBusy(false); }
   }
 
   return (
