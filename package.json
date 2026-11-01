@@ -23,11 +23,22 @@
     "@types/node": "^22.0.0",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
-    "eslint": "^9.0.0",
+    "eslint": "10.14.0",
     "playwright-core": "1.62.1",
     "typescript": "^5.9.0",
-    "typescript-eslint": "^8.0.0",
+    "typescript-eslint": "8.72.1",
     "vite": "8.3.5",
     "vitest": "4.1.12"
+  },
+  "overrides": {
+    "eslint": {
+      "minimatch": "11.0.3"
+    },
+    "@eslint/config-array": {
+      "minimatch": "11.0.3"
+    },
+    "@typescript-eslint/typescript-estree": {
+      "minimatch": "11.0.3"
+    }
   }
 }
