@@ -1,0 +1,77 @@
+name: Frontend quality
+
+# Local preparation only. Publishing and remote execution need approval.
+on:
+  workflow_dispatch:
+    inputs:
+      backend_ref:
+        description: Approved published backend full commit SHA with CI gates
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frontend-quality-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-alpine@sha256:0cefaabd882e42bcb2a2f3dc56d3ce4770560ba62fd7f197f1a2e008fd5731ab
+        env:
+          POSTGRES_USER: rpf_test
+          POSTGRES_DB: rpf012s_disposable
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 35440:5432
+        options: >-
+          --health-cmd "pg_isready -U rpf_test -d rpf012s_disposable"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      REPOPROOF_BACKEND: ${{ github.workspace }}/backend
+      NEXT_PUBLIC_API_BASE_URL: http://127.0.0.1:15440
+      NEXT_TELEMETRY_DISABLED: '1'
+      DATABASE_URL: postgresql://rpf_test@127.0.0.1:35440/rpf012s_disposable
+      RPF_E2E_DISPOSABLE_CONFIRMED: '1'
+      RPF_E2E_CHROME: /usr/bin/google-chrome
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          path: frontend
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24.x'
+      - name: Validate backend pin
+        env:
+          BACKEND_REF: ${{ inputs.backend_ref }}
+        run: node -e "if (!/^[0-9a-f]{40}$/.test(process.env.BACKEND_REF ?? '')) process.exit(1)"
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          repository: asapial/repoproof_backend
+          ref: ${{ inputs.backend_ref }}
+          path: backend
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install frontend without lifecycle scripts
+        working-directory: frontend
+        run: npm ci --ignore-scripts
+      - name: Install and build backend
+        working-directory: backend
+        run: |
+          npm ci --ignore-scripts
+          npm run build
+          npx --no-install prisma migrate deploy
+      - name: Candidate contract, tests, lint, types, build and audits
+        working-directory: frontend
+        run: npm run check
+      - name: Browser and API regressions
+        working-directory: frontend
+        run: |
+          test -x "$RPF_E2E_CHROME"
+          npm run test:local

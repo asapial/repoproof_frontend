@@ -4,6 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "check": "node scripts/quality.mjs",
+    "test:local": "node integration/local-services.mjs",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
