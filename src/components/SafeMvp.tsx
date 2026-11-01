@@ -5,7 +5,7 @@ import type { SafeFixture } from "../contracts/vendor/v1/safeMvp";
 import type { RequestDraftInput } from "../contracts/vendor/v1/requestDraft";
 import { ApiFailure, createSafeApi } from "../lib/safeApi";
 
-const configuredOrigin = process.env.NEXT_PUBLIC_API_BASE_URL ?? (process.env.NODE_ENV === "development" ? "http://localhost:5000" : "");
+const configuredOrigin = process.env.NEXT_PUBLIC_API_BASE_URL ?? (process.env.NODE_ENV === "development" ? "http://localhost:5000" : "/");
 type User = { name: string; email: string };
 type Phase = "loading" | "signed-out" | "ready" | "error";
 

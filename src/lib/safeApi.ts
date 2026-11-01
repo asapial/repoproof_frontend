@@ -67,7 +67,7 @@ async function readJson(response: Response, signal: AbortSignal): Promise<unknow
 }
 
 export function createSafeApi(baseUrl: string, settings: { timeoutMs?: number } = {}) {
-  const origin = resolveApiOrigin(baseUrl);
+  const origin = baseUrl === "/" ? "" : resolveApiOrigin(baseUrl);
   const timeoutMs = settings.timeoutMs ?? REQUEST_TIMEOUT_MS;
   if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 60_000) throw new ApiFailure("CONFIG_ERROR", "Invalid request deadline.");
   const pending = new Set<AbortController>();

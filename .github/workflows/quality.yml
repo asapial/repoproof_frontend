@@ -34,10 +34,11 @@ jobs:
           --health-interval 5s --health-timeout 5s --health-retries 10
     env:
       REPOPROOF_BACKEND: ${{ github.workspace }}/backend
-      NEXT_PUBLIC_API_BASE_URL: http://127.0.0.1:15440
+      REPOPROOF_API_ORIGIN: http://127.0.0.1:15440
       NEXT_TELEMETRY_DISABLED: '1'
       DATABASE_URL: postgresql://rpf_test@127.0.0.1:35440/rpf012s_disposable
       RPF_E2E_DISPOSABLE_CONFIRMED: '1'
+      RPF_E2E_SAME_ORIGIN: '1'
       RPF_E2E_CHROME: /usr/bin/google-chrome
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6

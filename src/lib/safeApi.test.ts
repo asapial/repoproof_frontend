@@ -4,6 +4,12 @@ import { createSafeApi, resolveApiOrigin } from "./safeApi";
 const fixture = { repositoryId: "repoproof-backend", repository: "asapial/repoproof_backend", fixtureKey: "discount-bug", issueNumber: 1, source: "CURATED" } as const;
 afterEach(() => vi.unstubAllGlobals());
 describe("safe MVP API client", () => {
+  it("uses fixed relative paths with credentials and no-store in same-origin mode", async () => {
+    const mock = vi.fn().mockResolvedValue(new Response('{"repositories":[]}')); vi.stubGlobal("fetch", mock);
+    expect(await createSafeApi("/").catalog()).toEqual([]);
+    expect(mock).toHaveBeenCalledWith("/api/v1/repositories", expect.objectContaining({ credentials: "include", cache: "no-store", signal: expect.any(AbortSignal) }));
+    expect(() => createSafeApi("//untrusted.example.test")).toThrow();
+  });
   it("validates the API origin without accepting credentials, paths or insecure remote hosts", () => {
     expect(resolveApiOrigin("http://127.0.0.1:5000")).toBe("http://127.0.0.1:5000");
     expect(resolveApiOrigin("https://api.example.test")).toBe("https://api.example.test");

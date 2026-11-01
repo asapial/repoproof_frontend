@@ -45,3 +45,10 @@ by the local harness and its child processes stopped on completion. YAML,
 action pin, token permission and checkout hygiene validation passed. Evidence
 is under parent `output/predeployment-2026-11-01/evidence/ci001fe-*`. This is
 local validation, not a GitHub or deployed-domain result.
+
+RPF-VCL-001FE adds the preferred same-origin profile. In this profile set
+`REPOPROOF_API_ORIGIN=http://127.0.0.1:15440`, leave the public direct variable
+unset, build, then run with `RPF_E2E_SAME_ORIGIN=1`. CI now selects this profile.
+The backend's exported app and exact web auth origin are tested through Next's
+rewrite; deployed HTTPS remains unverified. The local backend copy must match
+the reviewed source and have no local environment file.

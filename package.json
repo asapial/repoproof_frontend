@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "engines": { "node": "24.x" },
   "scripts": {
     "check": "node scripts/quality.mjs",
     "test:local": "node integration/local-services.mjs",

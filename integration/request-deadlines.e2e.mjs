@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { chromium } from "playwright-core";
 
 const frontend = process.env.RPF_E2E_FRONTEND, backend = process.env.RPF_E2E_BACKEND;
+const apiBase = process.env.RPF_E2E_API_BASE ?? backend;
 if (frontend !== "http://127.0.0.1:13300" || backend !== "http://127.0.0.1:15440" || process.env.RPF_E2E_DISPOSABLE_CONFIRMED !== "1") throw new Error("Refusing non-local deadline test");
+if (apiBase !== frontend && apiBase !== backend) throw new Error("Refusing non-local API target");
 const browser = await chromium.launch({ headless: true, executablePath: process.env.RPF_E2E_CHROME ?? "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe" });
 const context = await browser.newContext();
 try {
@@ -28,7 +30,7 @@ try {
   const draft = { repositoryId: fixture.repositoryId, fixtureKey: fixture.fixtureKey, issueNumber: fixture.issueNumber };
   const headers = { "access-control-allow-origin": frontend, "access-control-allow-credentials": "true", "access-control-allow-headers": "content-type", "access-control-allow-methods": "GET,PUT,OPTIONS" };
   let saved = null;
-  await page.route(`${backend}/**`, async route => {
+  await page.route(`${apiBase}/api/**`, async route => {
     const request = route.request(), path = new URL(request.url()).pathname;
     if (request.method() === "OPTIONS") return route.fulfill({ status: 204, headers });
     let body;

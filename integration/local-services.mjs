@@ -13,6 +13,9 @@ for (const directory of [frontend, backend]) for (const file of [".env", ".env.l
 }
 const env = Object.fromEntries(Object.entries(process.env).filter(([name]) => ["PATH", "SYSTEMROOT", "WINDIR", "TEMP", "TMP", "HOME", "USERPROFILE", "LOCALAPPDATA", "RPF_E2E_CHROME"].includes(name.toUpperCase())));
 Object.assign(env, { NEXT_TELEMETRY_DISABLED: "1", NODE_ENV: "test", PORT: "15440", DATABASE_URL: "postgresql://rpf_test@127.0.0.1:35440/rpf012s_disposable", BETTER_AUTH_SECRET: "synthetic-local-only-session-secret-0123456789", BETTER_AUTH_URL: "http://127.0.0.1:15440", FRONTEND_URL: "http://127.0.0.1:13300", RPF_E2E_FRONTEND: "http://127.0.0.1:13300", RPF_E2E_BACKEND: "http://127.0.0.1:15440", RPF_E2E_DISPOSABLE_CONFIRMED: "1" });
+if (process.env.RPF_E2E_SAME_ORIGIN === "1") {
+  Object.assign(env, { BETTER_AUTH_URL: env.FRONTEND_URL, RPF_E2E_API_BASE: env.FRONTEND_URL, REPOPROOF_API_ORIGIN: "http://127.0.0.1:15440" });
+}
 const children = [];
 const launch = (args, cwd, overrides = {}) => {
   const child = spawn(process.execPath, args, { cwd, env: { ...env, ...overrides }, stdio: ["ignore", "inherit", "inherit"] });
